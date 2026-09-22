@@ -401,53 +401,81 @@ function InboxPageInner() {
   }, []);
 
   const handleConversationsLoaded = useCallback(
-    (loaded: Conversation[]) => {
-      setConversations(loaded);
-      // Resolve a pending deep-link here rather than in an effect — this
-      // is an event handler, so the setState calls below are allowed by
-      // react-hooks/set-state-in-effect. Runs once per ?c=<id> URL value
-      // via the ref, so realtime refreshes of the list can't snap the
-      // user back to the deep-linked thread after they've navigated.
-      if (
-        deepLinkConvId &&
-        autoSelectedForDeepLinkRef.current !== deepLinkConvId &&
-        loaded.length > 0
-      ) {
-        autoSelectedForDeepLinkRef.current = deepLinkConvId;
-        // If the deep-linked conversation is already the active one
-        // (e.g. because the user clicked it in the list and we
-        // router.replace()'d the URL, which made the ConversationList
-        // refetch and land us back here), do NOT re-apply it. Doing so
-        // would setMessages([]) on a thread whose messages have
-        // already been loaded by MessageThread — and because
-        // conversationId didn't change, MessageThread wouldn't
-        // refetch. The thread would read "No messages yet" until a
-        // full page reload rehydrated state from scratch.
-        if (activeConversation?.id === deepLinkConvId) return;
-        const match = loaded.find((c) => c.id === deepLinkConvId);
-        if (match) {
-          setActiveConversation(match);
-          setActiveContact(match.contact ?? null);
-          setMessages([]);
-          // Mirror the optimistic unread reset that handleSelectConversation
-          // does — the user just deep-linked into this conv, treat that the
-          // same as a click. Leaves activeConversation.unread_count alone so
-          // the MessageThread reset effect still fires the server UPDATE.
-          if (match.unread_count > 0) {
-            setConversations((prev) =>
-              prev.map((c) =>
-                c.id === match.id ? { ...c, unread_count: 0 } : c,
-              ),
-            );
-          }
+  (loaded: Conversation[]) => {
+    setConversations(loaded);
+
+    // ============================================================
+    // SB Land visibility guard
+    //
+    // Jika conversation yang sedang aktif sudah tidak ada dalam
+    // daftar conversation yang boleh dibaca user (misalnya karena
+    // assignment berpindah ke agent lain), bersihkan seluruh state.
+    // ============================================================
+    if (
+      activeConversation &&
+      !loaded.some((c) => c.id === activeConversation.id)
+    ) {
+      setActiveConversation(null);
+      setActiveContact(null);
+      setMessages([]);
+
+      autoSelectedForDeepLinkRef.current = null;
+
+      router.replace("/inbox", { scroll: false });
+      return;
+    }
+
+    // Jika URL membawa ?c=<id> tetapi conversation tersebut tidak
+    // termasuk daftar yang boleh dilihat user, hapus stale deep-link.
+    if (
+      deepLinkConvId &&
+      !loaded.some((c) => c.id === deepLinkConvId)
+    ) {
+      setActiveConversation(null);
+      setActiveContact(null);
+      setMessages([]);
+
+      autoSelectedForDeepLinkRef.current = null;
+
+      router.replace("/inbox", { scroll: false });
+      return;
+    }
+
+    // Resolve pending deep-link.
+    if (
+      deepLinkConvId &&
+      autoSelectedForDeepLinkRef.current !== deepLinkConvId &&
+      loaded.length > 0
+    ) {
+      autoSelectedForDeepLinkRef.current = deepLinkConvId;
+
+      // Jangan reset thread yang memang sudah aktif.
+      if (activeConversation?.id === deepLinkConvId) return;
+
+      const match = loaded.find((c) => c.id === deepLinkConvId);
+
+      if (match) {
+        setActiveConversation(match);
+        setActiveContact(match.contact ?? null);
+        setMessages([]);
+
+        if (match.unread_count > 0) {
+          setConversations((prev) =>
+            prev.map((c) =>
+              c.id === match.id
+                ? { ...c, unread_count: 0 }
+                : c,
+            ),
+          );
         }
       }
-    },
-    [deepLinkConvId, activeConversation?.id]
-  );
+    }
+  },
+  [deepLinkConvId, activeConversation, router]
+);
 
-  const handleSelectConversation = useCallback(
-    (conv: Conversation) => {
+const handleSelectConversation = useCallback(
+  (conv: Conversation) => {
       // Re-clicking the already-active conversation would clear the
       // messages array, but the fetch effect in MessageThread only re-runs
       // when conversationId changes — so messages would stay empty until

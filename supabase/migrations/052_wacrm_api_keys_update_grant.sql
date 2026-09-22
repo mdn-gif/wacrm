@@ -1,0 +1,1 @@
+GRANT UPDATE ON TABLE public.api_keys TO authenticated;

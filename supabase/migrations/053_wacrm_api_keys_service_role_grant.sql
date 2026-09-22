@@ -1,0 +1,1 @@
+GRANT SELECT, UPDATE ON TABLE public.api_keys TO service_role;

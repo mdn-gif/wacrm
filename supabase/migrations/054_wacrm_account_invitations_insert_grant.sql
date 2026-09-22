@@ -1,0 +1,1 @@
+GRANT INSERT ON TABLE public.account_invitations TO authenticated;

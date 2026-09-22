@@ -842,26 +842,49 @@ export function MessageThread({
   );
 
   const handleAssignChange = useCallback(
-    async (agentId: string | null) => {
-      if (!conversation) return;
+  async (agentId: string | null) => {
+    if (!conversation) return;
 
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("conversations")
-        .update({ assigned_agent_id: agentId })
-        .eq("id", conversation.id);
+    try {
+      const response = await fetch(
+        `/api/conversations/${conversation.id}/assignment`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            agent_id: agentId,
+          }),
+        },
+      );
 
-      if (error) {
-        console.error("Failed to update assignment:", error);
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+
+        console.error(
+          "Failed to update assignment:",
+          result ?? response.statusText,
+        );
+
         toast.error(t("assignmentUpdateFailed"));
         return;
       }
 
-      onAssignChange(conversation.id, agentId);
-    },
-    [conversation, onAssignChange, t],
-  );
+      const result = await response.json();
 
+      onAssignChange(
+        conversation.id,
+        result.assigned_agent_id ?? null,
+      );
+    } catch (error) {
+      console.error("Failed to update assignment:", error);
+      toast.error(t("assignmentUpdateFailed"));
+    }
+  },
+  [conversation, onAssignChange, t],
+);
+  
   // Empty state — same WhatsApp-style doodle background as the active
   // thread below, so swapping between empty/selected doesn't change the
   // pattern under the user's eye.
@@ -887,10 +910,33 @@ export function MessageThread({
     (s) => s.value === conversation.status
   );
   const assignedAgentId = conversation.assigned_agent_id ?? null;
-  const currentAssignee = profiles.find((p) => p.user_id === assignedAgentId);
-  const assignLabel = assignedAgentId
-    ? (currentAssignee?.full_name ?? t("assigned"))
-    : t("assign");
+
+const currentAssignee = profiles.find(
+  (p) => p.user_id === assignedAgentId
+);
+
+const currentUserProfile = profiles.find(
+  (p) => p.user_id === user?.id
+);
+
+const canManageAssignments =
+  currentUserProfile?.account_role === "owner" ||
+  currentUserProfile?.account_role === "admin";
+
+const visibleProfiles = canManageAssignments
+  ? profiles
+  : profiles.filter((p) => p.user_id === user?.id);
+
+const canUnassign =
+  !!assignedAgentId &&
+  (
+    canManageAssignments ||
+    assignedAgentId === user?.id
+  );
+
+const assignLabel = assignedAgentId
+  ? (currentAssignee?.full_name ?? t("assigned"))
+  : t("assign");
 
   return (
     // `min-w-0` is load-bearing: the page already puts min-w-0 on the
@@ -1017,69 +1063,81 @@ export function MessageThread({
           </DropdownMenu>
 
           {/* Assign dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className={cn(
-                "inline-flex items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted",
-                assignedAgentId ? "text-primary" : "text-muted-foreground"
+<DropdownMenu>
+  <DropdownMenuTrigger
+    className={cn(
+      "inline-flex items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted",
+      assignedAgentId ? "text-primary" : "text-muted-foreground"
+    )}
+  >
+    <UserPlus className="h-3 w-3" />
+    <span className="hidden sm:inline">{assignLabel}</span>
+    <ChevronDown className="h-3 w-3" />
+  </DropdownMenuTrigger>
+
+  <DropdownMenuContent
+    align="end"
+    className="border-border bg-popover"
+  >
+    {visibleProfiles.length === 0 ? (
+      <DropdownMenuItem
+        disabled
+        className="text-sm text-muted-foreground"
+      >
+        {t("noTeammates")}
+      </DropdownMenuItem>
+    ) : (
+      visibleProfiles.map((p) => {
+        const isSelected = p.user_id === assignedAgentId;
+        const presence = getPresence(p.user_id);
+
+        return (
+          <DropdownMenuItem
+            key={p.id}
+            onClick={() => handleAssignChange(p.user_id)}
+            className={cn(
+              "text-sm",
+              isSelected
+                ? "text-primary"
+                : "text-popover-foreground"
+            )}
+          >
+            <PresenceDot
+              status={presence}
+              label={presenceLabel(
+                presence,
+                getRow(p.user_id)?.last_seen_at ?? null,
+                now
               )}
-            >
-              <UserPlus className="h-3 w-3" />
-              <span className="hidden sm:inline">{assignLabel}</span>
-              <ChevronDown className="h-3 w-3" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="border-border bg-popover"
-            >
-              {profiles.length === 0 ? (
-                <DropdownMenuItem disabled className="text-sm text-muted-foreground">
-                  {t("noTeammates")}
-                </DropdownMenuItem>
-              ) : (
-                profiles.map((p) => {
-                  const isSelected = p.user_id === assignedAgentId;
-                  const presence = getPresence(p.user_id);
-                  return (
-                    <DropdownMenuItem
-                      key={p.id}
-                      onClick={() => handleAssignChange(p.user_id)}
-                      className={cn(
-                        "text-sm",
-                        isSelected ? "text-primary" : "text-popover-foreground"
-                      )}
-                    >
-                      <PresenceDot
-                        status={presence}
-                        label={presenceLabel(
-                          presence,
-                          getRow(p.user_id)?.last_seen_at ?? null,
-                          now
-                        )}
-                        className="mr-2"
-                      />
-                      <span className="flex-1">
-                        {p.full_name}
-                        {p.user_id === user?.id ? t("me") : ""}
-                      </span>
-                      {isSelected && <Check className="ml-2 h-3 w-3" />}
-                    </DropdownMenuItem>
-                  );
-                })
-              )}
-              {assignedAgentId && (
-                <>
-                  <DropdownMenuSeparator className="bg-border" />
-                  <DropdownMenuItem
-                    onClick={() => handleAssignChange(null)}
-                    className="text-sm text-muted-foreground"
-                  >
-                    {t("unassign")}
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+              className="mr-2"
+            />
+
+            <span className="flex-1">
+              {p.full_name}
+              {p.user_id === user?.id ? t("me") : ""}
+            </span>
+
+            {isSelected && (
+              <Check className="ml-2 h-3 w-3" />
+            )}
+          </DropdownMenuItem>
+        );
+      })
+    )}
+
+    {canUnassign && (
+      <>
+        <DropdownMenuSeparator className="bg-border" />
+        <DropdownMenuItem
+          onClick={() => handleAssignChange(null)}
+          className="text-sm text-muted-foreground"
+        >
+          {t("unassign")}
+        </DropdownMenuItem>
+      </>
+    )}
+  </DropdownMenuContent>
+</DropdownMenu>
         </div>
       </div>
 

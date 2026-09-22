@@ -32,7 +32,7 @@
     "unreadNotifications": "{count} unread {count, plural, =1 {notification} other {notifications}}",
     "roleOwner": "Owner",
     "roleAdmin": "Admin",
-    "roleAgent": "Agent",
+    "roleAgent": "Marketing",
     "roleViewer": "Viewer",
     "closeMenu": "Close menu",
     "defaultUser": "User",

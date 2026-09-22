@@ -128,9 +128,26 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   // we gate on. Wait for the profile fetch to settle first, otherwise
   // the strip flashes in once the row resolves (a layout jump).
   const showAccountStrip =
-    !profileLoading &&
-    !!account?.name &&
-    account.name !== profile?.full_name;
+  accountRole !== "agent" &&
+  !profileLoading &&
+  !!account?.name &&
+  account.name !== profile?.full_name;
+
+	const visibleNavItems =
+  accountRole === "agent"
+    ? navItems.filter((item) =>
+        [
+          "/dashboard",
+          "/inbox",
+          "/notifications",
+          "/contacts",
+          "/pipelines",
+        ].includes(item.href),
+      )
+    : navItems;
+
+const visibleBottomNavItems =
+  accountRole === "agent" ? [] : bottomNavItems;
 
   // Close the drawer when route changes — users opened it to navigate,
   // so once they pick a destination the drawer should get out of the way.
@@ -191,9 +208,15 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <MessageSquare className="h-4 w-4" />
             </div>
-            <span className="text-sm font-semibold text-foreground">
-              {t("title")}
-            </span>
+            <div className="flex flex-col leading-tight">
+  <span className="text-sm font-semibold text-foreground">
+    SB Land CRM
+  </span>
+  <span className="text-[10px] text-muted-foreground">
+    Powered by DM.OS
+  </span>
+</div>
+            
           </Link>
           <button
             type="button"
@@ -208,7 +231,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         {/* Main navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-1">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const isActive =
                 pathname === item.href ||
                 (item.href !== "/dashboard" && pathname.startsWith(item.href));
@@ -271,7 +294,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           <div className="my-4 border-t border-border" />
 
           <ul className="flex flex-col gap-1">
-            {bottomNavItems.map((item) => {
+            {visibleBottomNavItems.map((item) => {
               const isActive = pathname.startsWith(item.href);
               return (
                 <li key={item.href}>
@@ -372,18 +395,20 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 <User className="size-4" />
                 {t("menuProfile")}
               </DropdownMenuItem>
-              <DropdownMenuItem
-                render={
-                  <Link
-                    href="/settings?tab=whatsapp"
-                    onClick={onClose}
-                    className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-                  />
-                }
-              >
-                <Settings className="size-4" />
-                {t("menuSettings")}
-              </DropdownMenuItem>
+              {accountRole !== "agent" && (
+  <DropdownMenuItem
+    render={
+      <Link
+        href="/settings?tab=whatsapp"
+        onClick={onClose}
+        className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
+      />
+    }
+  >
+    <Settings className="size-4" />
+    {t("menuSettings")}
+  </DropdownMenuItem>
+)}
               <DropdownMenuSeparator className="bg-border" />
               <DropdownMenuItem
                 onClick={signOut}

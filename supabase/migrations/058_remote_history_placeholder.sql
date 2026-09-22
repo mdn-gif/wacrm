@@ -1,0 +1,3 @@
+-- Placeholder migration.
+-- Version 058 already exists in remote Supabase migration history.
+-- File restored locally only to keep migration history in sync.

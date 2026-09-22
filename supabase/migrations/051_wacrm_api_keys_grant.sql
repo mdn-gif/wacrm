@@ -1,0 +1,1 @@
+GRANT SELECT, INSERT ON TABLE public.api_keys TO authenticated;
